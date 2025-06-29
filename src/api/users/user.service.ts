@@ -1,0 +1,133 @@
+import {prisma} from '../../lib/prisma';
+import cloudinary from '../../lib/cloudinary';
+import { UpdateProfileData } from '../../utils/types';
+
+/**
+ * Encuentra un usuario por su ID y devuelve su información pública.
+ * @param userId - El ID del usuario a buscar.
+ */
+export const findUserById = async (userId : string) => {
+    const user = await prisma.user.findUnique({
+        where: {
+            id: userId
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true, // Se incluye el email para el perfil propio del usuario
+            createdAt: true,
+            profile: true,
+            role: true,
+            points: true
+        }
+    });
+
+    if (! user) {
+        throw new Error('Usuario no encontrado');
+    }
+    return user;
+};
+
+
+
+/**
+ * Actualiza o crea el perfil de un usuario.
+ * @param userId - El ID del usuario.
+ * @param data - Los datos a actualizar (bio y/o avatarUrl).
+ */
+export const updateUserProfile = async (userId : string, data : UpdateProfileData) => {
+    await prisma.user.update({
+        where: {
+            id: userId
+        },
+        data: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+        }
+    })
+
+    const profile = await prisma.profile.upsert({
+        where: {
+            userId
+        },
+        update: {
+            nickname: data.nickname,
+            bio: data.bio,
+            avatarUrl: data.avatarUrl,
+            city: data.city,
+            hometown: data.hometown,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth.toString()) : undefined,
+            showInfo: data.showInfo,
+            skills: data.skills,
+            jobSeeking: data.jobSeeking,
+            cvUrl: data.cvUrl,
+        },
+        create: {
+            userId,
+            nickname: data.nickname,
+            bio: data.bio,
+            avatarUrl: data.avatarUrl,
+            city: data.city,
+            hometown: data.hometown,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth.toString()) : undefined,
+            showInfo: data.showInfo,
+            skills: data.skills,
+            jobSeeking: data.jobSeeking,
+            cvUrl: data.cvUrl
+        }
+    })
+    return findUserById(userId);
+};
+
+/**
+ * Sube un buffer de imagen a Cloudinary.
+ * @param fileBuffer - El buffer del archivo de imagen.
+ * @returns La URL segura de la imagen subida.
+ */
+export const uploadImage = async (fileBuffer : Buffer) : Promise < string > => {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream({
+            folder: 'eventclub_avatars',
+            transformation: [
+                {
+                    width: 300,
+                    height: 300,
+                    crop: 'fill'
+                }
+            ]
+        }, (error, result) => {
+            if (error) 
+                return reject(error);
+            
+            if (result) 
+                resolve(result.secure_url);
+             else 
+                reject(new Error('No se recibió resultado de Cloudinary.'));
+            
+        });
+        uploadStream.end(fileBuffer);
+    });
+};
+
+export const updateUserAvatar = async (userId: string, avatarUrl: string) => {
+  await prisma.profile.upsert({
+    where: {userId},
+    update: {avatarUrl},
+    create: {userId, avatarUrl},
+    include: {user: true}
+  })
+  return findUserById(userId);
+}
+
+/**
+ * Actualiza el push token de un usuario.
+ * @param userId - El ID del usuario.
+ * @param token - El Expo Push Token.
+ */
+export const updatePushToken = async (userId: string, token: string) => {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { pushToken: token },
+    });
+  };

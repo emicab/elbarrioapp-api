@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  PRODUCER
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(cuid()) // Using CUIDs for unique IDs
+  email     String   @unique
+  firstName String
+  lastName  String
+  password  String // This will store the hashed password, NOT the raw one.
+  role      Role     @default(USER)
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pushToken String? @unique
+
+  // Relations
+  profile  Profile? // One-to-one relation with Profile
+  events   Event[] // One-to-many: a user (producer) can have many events
+  posts    Post[] // One-to-many: a user can create many posts
+  comments Comment[] // One-to-many: a user can write many comments
+  likes    Like[] // One-to-many: a user can give many likes
+
+  Company Company[]
+  BenefitRedemption BenefitRedemption[]
+
+  CommentLike CommentLike[]
+}
+
+model Profile {
+  id          String  @id @default(cuid())
+
+  bio         String?
+  nickname    String?
+  avatarUrl   String?
+  preferences Json?
+  city        String?
+  hometown    String?
+  dateOfBirth DateTime?
+  showInfo    Boolean @default(false)
+
+  // Info privada
+  skills     String[]
+  jobSeeking String?
+  cvUrl      String?
+
+
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// --- Event Models ---
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  date        DateTime
+  address     String? // A simple string for the address
+  city        String?
+  latitude    Float
+  longitude   Float
+
+  dressCode String?
+  price     Float?   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  organizerId String
+  organizer   User       @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  categories  Category[] // Many-to-many relation with Category
+}
+
+model Category {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // Relations
+  events Event[] // Many-to-many relation with Event
+  posts  Post[] // Many-to-many relation with Post (for tags)
+
+  Benefit Benefit[]
+}
+
+// --- Community Feed Models ---
+
+model Post {
+  id        String   @id @default(cuid())
+  content   String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  authorId String
+  author   User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[] // One-to-many relation with Comment
+  likes    Like[] // One-to-many relation with Like
+  tags     Category[] // Many-to-many relation with Category (acting as tags)
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  postId   String
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  likes CommentLike[]
+}
+
+model CommentLike {
+  userId String
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commentId String
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  createAt DateTime @default(now())
+
+  @@id([userId, commentId])
+}
+
+model Like {
+  // This model doesn't need its own ID, as the combination of userId and postId is unique.
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // This ensures a user can only like a post once.
+  @@id([userId, postId])
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+  city        String
+  
+  // El usuario que administra esta empresa
+  adminId     String   @unique
+  admin       User     @relation(fields: [adminId], references: [id])
+  
+  benefits    Benefit[]
+}
+
+enum BenefitStatus {
+  AVAILABLE
+  EXPIRED
+}
+
+enum BenefitUsagePeriod {
+  LIFETIME  // N veces
+  DAILY     // Una vez por día
+  WEEKLY    // Una vez por semana
+  MONTHLY   // Una vez por mes
+}
+
+model Benefit {
+  id           String   @id @default(cuid())
+  title        String
+  description  String
+  terms        String? // Términos y condiciones
+  status       BenefitStatus @default(AVAILABLE)
+
+  pointCost   Int?
+  isNew       Boolean @default(false)
+  isExclusive Boolean @default(false)
+  address     String?
+  benefitType String?
+
+  usageLimit   Int                @default(1) // Cuántas veces se puede usar en el período
+  limitPeriod  BenefitUsagePeriod @default(LIFETIME) // El período del límite
+  
+  // Relations
+  categories   Category[]
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  
+  redemptions  BenefitRedemption[]
+}
+
+model BenefitRedemption {
+  id          String    @id @default(cuid())
+  token       String    @unique // El token de un solo uso
+  expiresAt   DateTime  // Cuándo expira el token
+  redeemedAt  DateTime? // Cuándo fue canjeado
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  
+  benefitId   String
+  benefit     Benefit   @relation(fields: [benefitId], references: [id])
+}
