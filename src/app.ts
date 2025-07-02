@@ -9,6 +9,7 @@ import adminRoutes from './api/admin/admin.routes';
 import benefitRoutes from './api/benefits/benefit.routes';
 import redeemRoutes from './api/redeem/redeem.routes';
 import commentRoutes from './api/comment/comment.routes';
+import channelRoutes from './api/channels/channel.routes';
 
 const app = express();
 
@@ -27,7 +28,9 @@ app.use('/api/posts', postRoutes);
 app.use('/api/admin', adminRoutes)
 app.use('/api/benefits', benefitRoutes)
 app.use('/api/redeem', redeemRoutes)
-app.use('/api/comment', commentRoutes)
+app.use('/api/comments', commentRoutes)
+app.use('/api/channels', channelRoutes)
+
 
 
 export default app;

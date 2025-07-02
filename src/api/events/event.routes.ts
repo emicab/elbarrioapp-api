@@ -18,7 +18,7 @@ router.get('/', getAllEventsController);
 router.get('/nearby', getNearbyEventsController);
 
 // Obtener un evento específico por su ID
-router.get('/:id', getEventByIdController);
+router.get('/:id', isAuthenticated, getEventByIdController);
 
 
 // --- Rutas Protegidas (Solo para Productores) ---

@@ -3,30 +3,32 @@ import cloudinary from '../../lib/cloudinary';
 import { UpdateProfileData } from '../../utils/types';
 
 /**
- * Encuentra un usuario por su ID y devuelve su información pública.
- * @param userId - El ID del usuario a buscar.
+ * Encuentra un usuario por su ID y devuelve su información completa.
  */
-export const findUserById = async (userId : string) => {
-    const user = await prisma.user.findUnique({
-        where: {
-            id: userId
-        },
-        select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true, // Se incluye el email para el perfil propio del usuario
-            createdAt: true,
-            profile: true,
-            role: true,
-            points: true
-        }
-    });
+export const findUserById = async (userId: string) => {
+  if (!userId) {
+    throw new Error('No se proporcionó un ID de usuario.');
+  }
 
-    if (! user) {
-        throw new Error('Usuario no encontrado');
-    }
-    return user;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      points: true,
+      isVerified: true, // Asegurémonos de incluir todos los campos necesarios
+      createdAt: true,
+      profile: true,
+    },
+  });
+
+  if (!user) {
+    throw new Error('Usuario no encontrado.');
+  }
+  return user;
 };
 
 
@@ -85,10 +87,10 @@ export const updateUserProfile = async (userId : string, data : UpdateProfileDat
  * @param fileBuffer - El buffer del archivo de imagen.
  * @returns La URL segura de la imagen subida.
  */
-export const uploadImage = async (fileBuffer : Buffer) : Promise < string > => {
+export const uploadImage = async (fileBuffer : Buffer, folder?: string) : Promise < string > => {
     return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream({
-            folder: 'eventclub_avatars',
+            folder: folder ? folder : 'eventclub_avatars',
             transformation: [
                 {
                     width: 300,

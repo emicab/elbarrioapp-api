@@ -1,8 +1,5 @@
 import multer from 'multer';
 
-// Configuramos multer para que guarde los archivos en memoria.
-// Esto es más eficiente que guardarlos en el disco, ya que los subiremos
-// directamente a Cloudinary y no necesitamos el archivo temporal.
 const storage = multer.memoryStorage();
 
 // Creamos el middleware de multer

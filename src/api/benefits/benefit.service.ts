@@ -9,7 +9,7 @@ import {randomBytes} from 'crypto';
  * @param userId - El ID del usuario.
  * @returns El número de veces que el usuario ha canjeado el beneficio en el período actual.
  */
-const _getUsageCount = async (benefit : Benefit, userId : string) : Promise < number > => {
+export const _getUsageCount = async (benefit : Benefit, userId : string) : Promise < number > => {
     let sinceDate: Date |undefined;
 
     switch (benefit.limitPeriod) {
@@ -33,14 +33,11 @@ const _getUsageCount = async (benefit : Benefit, userId : string) : Promise < nu
 
     return prisma.benefitRedemption.count({
         where: {
-            benefitId: benefit.id,
-            userId,
-            redeemedAt: {
-                not: null,
-                gte: sinceDate
-            }
-        }
-    });
+          benefitId: benefit.id,
+          userId,
+          redeemedAt: { not: null, gte: sinceDate },
+        },
+      });
 };
 
 export const findBenefitsByCity = async (city : string) => {

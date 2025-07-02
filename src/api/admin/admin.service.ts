@@ -1,17 +1,9 @@
 import { BenefitUsagePeriod } from '@prisma/client';
 import {prisma} from '../../lib/prisma';
-
-export const createCompany = async (data : {
-    name: string;
-    city: string;
-    logoUrl?: string;
-    adminId: string
-}) => {
-    return prisma.company.create({data});
-};
+import { CreateCompanyData, CreateEventData } from '../../utils/types';
+import { uploadImage } from '../users/user.service';
 
 /**
- * 
  * @param data 
  * @returns Creamos una nueva empresa con un beneficio asociado
  */
@@ -68,5 +60,58 @@ export const getBenefits = async () => {
                 name: 'asc'
             }
         }
+    });
+};
+
+export const createChannel = async (data: { name: string; slug: string; description?: string; isPrivate?: boolean }) => {
+  return prisma.channel.create({ data });
+};
+
+export const createEvent = async (data: CreateEventData, files?: Express.Multer.File[]) => {
+  const { organizerId, companyId, ...eventData } = data;
+  
+  const imageUrls: string[] = [];
+
+  // Si hay archivos, los subimos uno por uno
+  if (files && files.length > 0) {
+    for (const file of files) {
+      const url = await uploadImage(file.buffer, 'eventclub_events');
+      imageUrls.push(url);
+    }
+  }
+
+  return prisma.event.create({
+    data: {
+      ...eventData,
+      price: Number(data.price) || 0,
+      date: new Date(data.date),
+      imageUrls: imageUrls, // Guardamos el array de URLs
+      organizer: { connect: { id: organizerId } },
+      company: { connect: { id: companyId } },
+      latitude: 0,
+      longitude: 0,
+    },
+  });
+};
+
+export const createCompany = async (data: CreateCompanyData, logoBuffer?: Buffer) => {
+  let logoUrl: string | undefined = undefined;
+
+  // Si se proporciona un logo, lo subimos a Cloudinary
+  if (logoBuffer) {
+    logoUrl = await uploadImage(logoBuffer, 'eventclub_companies');
+  }
+
+  return prisma.company.create({
+    data: {
+      ...data,
+      logoUrl,
+    },
+  });
+};
+
+export const findAllCompanies = async () => {
+    return prisma.company.findMany({
+        orderBy: { name: 'asc' }
     });
 };

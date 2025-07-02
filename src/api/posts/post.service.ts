@@ -1,18 +1,49 @@
-import {prisma} from '../../lib/prisma';
-import {io} from '../../socket';
+import { User } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
+import { io } from '../../socket';
+import { uploadImage } from '../users/user.service';
 
-export const createPost = async (authorId : string, content : string, imageUrl? : string) => {
+export const createPost = async (authorId: string, content: string, files?: Express.Multer.File[], channelId?: string) => {
+    if (!channelId) {
+        throw new Error("No se ha especificado un canal para la publicación.");
+    }
+    const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+    if (!channel) throw new Error("Canal no encontrado");
+
+    // Si el canal es privado, verificamos si el autor puede postear.
+    if (channel.isPrivate) {
+        const membership = await prisma.channelMembership.findUnique({
+            where: { userId_channelId: { userId: authorId, channelId: channel.id } }
+        });
+        if (!membership || membership.status !== 'MEMBER') {
+            throw new Error("No tienes permiso para publicar en este canal.");
+        }
+    }
+
+    const imageUrls: string[] = [];
+
+    // Si hay archivos, los subimos uno por uno a Cloudinary
+    if (files && files.length > 0) {
+        for (const file of files) {
+            const imageUrl = await uploadImage(file.buffer, 'eventclub_posts');
+            imageUrls.push(imageUrl);
+        }
+    }
+
+    /** se crea el post para enviarlo */
     const newPost = await prisma.post.create({
         data: {
             authorId,
             content,
-            imageUrl
+            imageUrls,
+            channelId
         },
         include: {
             author: {
                 select: {
                     firstName: true,
                     lastName: true,
+                    isVerified: true,
                     profile: {
                         select: {
                             avatarUrl: true
@@ -29,12 +60,12 @@ export const createPost = async (authorId : string, content : string, imageUrl? 
         }
     });
 
-    io.emit('post:new', newPost)
+    io.emit('post:new', newPost.id)
     return newPost;
 };
 
 export const findAllPosts = async () => {
-    const posts =  await prisma.post.findMany({
+    const posts = await prisma.post.findMany({
         orderBy: {
             createdAt: 'desc'
         },
@@ -44,6 +75,7 @@ export const findAllPosts = async () => {
                     id: true,
                     firstName: true,
                     lastName: true,
+                    isVerified: true,
                     profile: {
                         select: {
                             avatarUrl: true
@@ -68,6 +100,7 @@ export const findAllPosts = async () => {
                         select: {
                             firstName: true,
                             lastName: true,
+                            isVerified: true,
                             profile: {
                                 select: {
                                     avatarUrl: true
@@ -77,81 +110,14 @@ export const findAllPosts = async () => {
                     }
                 }
             },
-			likes: {
-				select: {
-					userId: true
-				}
-			}
-        }
-    });
-
-	return posts.map(post => {
-        const {
-            likes,
-            comments,
-            ...restOfPost
-        } = post;
-        return {
-            ...restOfPost,
-            likedByCurrentUser: likes.length > 0,
-            // Añadimos 'lastComment' al objeto final si existe
-            lastComment: comments[0] || null
-        };
-    });
-};
-
-export const findAllPostsForUser = async (userId : string) => {
-    const posts = await prisma.post.findMany({
-        orderBy: {
-            createdAt: 'desc'
-        },
-        include: {
-            author: {
-                select: {
-                    firstName: true,
-                    lastName: true,
-                    profile: {
-                        select: {
-                            avatarUrl: true
-                        }
-                    }
-                }
-            },
-            _count: {
-                select: {
-                    comments: true,
-                    likes: true
-                }
-            },
-            // Incluimos los likes para saber si el usuario actual ya dio like
             likes: {
-                where: {
-                    userId: userId
-                }
-            },
-            comments: {
-                orderBy: {
-                    createdAt: 'desc'
-                },
-                take: 1,
-                include: {
-                    author: {
-                        select: {
-                            firstName: true,
-                            lastName: true,
-                            profile: {
-                                select: {
-                                    avatarUrl: true
-                                }
-                            }
-                        }
-                    }
+                select: {
+                    userId: true
                 }
             }
         }
     });
 
-    // Mapeamos el resultado para añadir el campo `likedByCurrentUser`
     return posts.map(post => {
         const {
             likes,
@@ -167,13 +133,55 @@ export const findAllPostsForUser = async (userId : string) => {
     });
 };
 
-export const addCommentToPost = async (postId : string, authorId : string, text : string) => {
+export const findAllPostsForUser = async (userId: string, channelSlug?: string) => {
+
+    // 1. Preparamos el filtro base
+    const whereClause: any = {};
+
+    // 2. Si llega un channelSlug y NO es "todos", lo añadimos dinámicamente al filtro
+    if (channelSlug && channelSlug !== 'Todos') {
+        whereClause.channel = {
+            slug: {
+                equals: channelSlug,
+                mode: 'insensitive',
+            },
+        };
+    }
+
+    // 3. Ejecutamos la consulta a la base de datos con el filtro construido
+    const posts = await prisma.post.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        include: {
+            author: { select: { firstName: true, lastName: true, isVerified: true, profile: { select: { avatarUrl: true } } } },
+            _count: { select: { comments: true, likes: true } },
+            likes: { where: { userId: userId } },
+            comments: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                include: { author: { select: { firstName: true } } },
+            },
+        },
+    });
+
+    // ... (El resto de la lógica para mapear y añadir `likedByCurrentUser` se mantiene igual)
+    return posts.map(post => {
+        const { likes, comments, ...restOfPost } = post;
+        return {
+            ...restOfPost,
+            likedByCurrentUser: likes.length > 0,
+            lastComment: comments[0] || null,
+        };
+    });
+};
+
+export const addCommentToPost = async (postId: string, authorId: string, text: string) => {
     const post = await prisma.post.findUnique({
-		where: { id: postId},
-		select: { authorId: true }
-	})
-	
-	const newComment = await prisma.comment.create({
+        where: { id: postId },
+        select: { authorId: true }
+    })
+
+    const newComment = await prisma.comment.create({
         data: {
             postId,
             authorId,
@@ -182,19 +190,19 @@ export const addCommentToPost = async (postId : string, authorId : string, text 
     });
 
     // Notificamos a todos que este post fue actualizado
-    io.emit('interaction:update', {postId});
+    io.emit('interaction:update', { postId });
 
-	if(post.authorId !== authorId){
-		io.to(post.authorId).emit('notification:new', {
-			message: 'Recibiste un comentario en tu publicación.',
-			postId: postId
-		})
-	}
+    if (post.authorId !== authorId) {
+        io.to(post.authorId).emit('notification:new', {
+            message: 'Recibiste un comentario en tu publicación.',
+            postId: postId
+        })
+    }
 
     return newComment;
 };
 
-export const findCommentsForPost = async (postId : string, userId : string) => {
+export const findCommentsForPost = async (postId: string, userId: string) => {
     const comments = await prisma.comment.findMany({
         where: {
             postId
@@ -207,6 +215,7 @@ export const findCommentsForPost = async (postId : string, userId : string) => {
                 select: {
                     firstName: true,
                     lastName: true,
+                    isVerified: true,
                     profile: {
                         select: {
                             avatarUrl: true
@@ -239,7 +248,7 @@ export const findCommentsForPost = async (postId : string, userId : string) => {
     });
 };
 
-export const toggleLikeOnPost = async (postId : string, userId : string) => {
+export const toggleLikeOnPost = async (postId: string, userId: string) => {
     const existingLike = await prisma.like.findUnique({
         where: {
             userId_postId: {
@@ -268,13 +277,13 @@ export const toggleLikeOnPost = async (postId : string, userId : string) => {
     }
 
     // Notificamos a todos que este post fue actualizado
-    io.emit('interaction:update', {postId});
+    io.emit('interaction:update', { postId });
 };
 
 /**
  * Encuentra un único post por su ID y calcula los datos dinámicos para el usuario actual.
  */
-export const findPostByIdForUser = async (postId : string, userId : string) => {
+export const findPostByIdForUser = async (postId: string, userId: string) => {
     const post = await prisma.post.findUnique({
         where: {
             id: postId
@@ -284,6 +293,7 @@ export const findPostByIdForUser = async (postId : string, userId : string) => {
                 select: {
                     firstName: true,
                     lastName: true,
+                    isVerified: true,
                     profile: {
                         select: {
                             avatarUrl: true
@@ -312,6 +322,7 @@ export const findPostByIdForUser = async (postId : string, userId : string) => {
                         select: {
                             firstName: true,
                             lastName: true,
+                            isVerified: true,
                             profile: {
                                 select: {
                                     avatarUrl: true
@@ -324,7 +335,7 @@ export const findPostByIdForUser = async (postId : string, userId : string) => {
         }
     });
 
-    if (! post) {
+    if (!post) {
         throw new Error('Publicación no encontrada.');
     }
 
@@ -340,3 +351,32 @@ export const findPostByIdForUser = async (postId : string, userId : string) => {
         lastComment: comments[0] || null
     };
 };
+
+/**
+ * Elimina una publicación si el usuario tiene los permisos necesarios.
+ * @param postId - El ID de la publicación a eliminar.
+ * @param currentUser - El objeto del usuario que realiza la petición (contiene ID y rol).
+ */
+export const deletePost = async (postId: string, currentUser: User) => {
+    const post = await prisma.post.findUnique({
+        where: { id: postId },
+        select: { authorId: true }
+    })
+
+    if(!post) {
+        throw new Error('publicacion no encontrada.')
+    }
+    
+    const isAuthor = post.authorId === currentUser.id
+    const isAdmin = currentUser.role === "ADMIN"
+
+    if (!isAuthor && !isAdmin){
+        throw new Error('No tienes permiso para eliminar esta publicación.')
+    }
+
+    await prisma.post.delete({
+        where: {id: postId}
+    })
+
+    io.emit('interaction:update', { postId })
+}

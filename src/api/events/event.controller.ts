@@ -27,7 +27,12 @@ export const getAllEventsController = async (req: AuthRequest, res: Response) =>
 
 export const getEventByIdController = async (req: AuthRequest, res: Response) => {
   try {
-    const event = await EventService.findEventById(req.params.id);
+    const userId = req.user?.userId;
+    const eventId = req.params.id as string;
+
+    if (!userId) return res.status(400).json({ message: 'ID de usuario no encontrado.' });
+
+    const event = await EventService.findEventByIdForUser(eventId, userId);
     res.status(200).json(event);
   } catch (error: any) {
     res.status(404).json({ message: error.message });

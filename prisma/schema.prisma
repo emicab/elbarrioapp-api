@@ -24,64 +24,115 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pushToken String? @unique
+  pushToken  String? @unique
+  isVerified Boolean @default(false)
 
   // Relations
-  profile  Profile? // One-to-one relation with Profile
-  events   Event[] // One-to-many: a user (producer) can have many events
-  posts    Post[] // One-to-many: a user can create many posts
-  comments Comment[] // One-to-many: a user can write many comments
-  likes    Like[] // One-to-many: a user can give many likes
+  profile  Profile?
+  events   Event[]
+  posts    Post[]
+  comments Comment[]
+  likes    Like[]
 
-  Company Company[]
+  Company           Company[]
   BenefitRedemption BenefitRedemption[]
 
   CommentLike CommentLike[]
+  channelMemberships ChannelMembership[]
+
+  Order Order[]
 }
 
 model Profile {
-  id          String  @id @default(cuid())
+  id String @id @default(cuid())
 
   bio         String?
+  phone       String?
   nickname    String?
   avatarUrl   String?
   preferences Json?
   city        String?
   hometown    String?
   dateOfBirth DateTime?
-  showInfo    Boolean @default(false)
+  showInfo    Boolean   @default(false)
 
   // Info privada
   skills     String[]
   jobSeeking String?
   cvUrl      String?
 
-
-  userId      String  @unique
-  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // --- Event Models ---
 
 model Event {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String
   date        DateTime
-  address     String? // A simple string for the address
+  address     String?
   city        String?
   latitude    Float
   longitude   Float
+  price       Float?    @default(0)
+  imageUrls   String[]
+  place       String?
 
-  dressCode String?
-  price     Float?   @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // --- RELACIONES CLAVE ---
 
-  // Relations
   organizerId String
-  organizer   User       @relation(fields: [organizerId], references: [id], onDelete: Cascade)
-  categories  Category[] // Many-to-many relation with Category
+  organizer   User      @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+
+  categories  Category[]
+  benefits    Benefit[]
+  tickets     TicketType[]
+}
+
+model TicketType {
+  id        String   @id @default(cuid())
+  name      String   // El nombre del tipo de entrada, ej: "Entrada General", "VIP", "Early Bird"
+  price     Float    // El precio de este tipo de entrada en la moneda base (ej. USD)
+  quantity  Int      // La cantidad total de entradas de este tipo disponibles
+  
+  // Relación: Cada tipo de entrada pertenece a un evento específico
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  
+  // Relación: Un tipo de entrada puede tener muchas entradas individuales vendidas
+  tickets   Ticket[]
+}
+
+model Ticket {
+  id          String   @id @default(cuid())
+  qrCode      String   @unique // Un código único para el QR de la entrada
+  status      String   @default("VALID") // ej: "VALID", "USED", "CANCELLED"
+  
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+}
+
+// 3. Un modelo para agrupar las entradas de una misma compra
+model Order {
+  id              String   @id @default(cuid())
+  amount          Float    // Monto total de la compra
+  currency        String   @default("usd")
+  status          String   // ej: "PENDING", "COMPLETED", "FAILED"
+  stripePaymentIntentId String @unique // El ID del Payment Intent de Stripe
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  tickets         Ticket[]
+  createdAt       DateTime @default(now())
 }
 
 model Category {
@@ -97,10 +148,40 @@ model Category {
 
 // --- Community Feed Models ---
 
+enum ChannelMembershipStatus {
+  MEMBER
+  PENDING // Para futuras solicitudes de acceso
+  BLOCKED
+}
+
+model Channel {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  iconName    String?
+  isPrivate   Boolean @default(false)
+
+  post Post[]
+  members   ChannelMembership[]
+}
+
+model ChannelMembership {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  status    ChannelMembershipStatus @default(MEMBER)
+
+  joinedAt  DateTime @default(now())
+
+  @@id([userId, channelId])
+}
+
 model Post {
   id        String   @id @default(cuid())
   content   String
-  imageUrl  String?
+  imageUrls  String[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -110,6 +191,9 @@ model Post {
   comments Comment[] // One-to-many relation with Comment
   likes    Like[] // One-to-many relation with Like
   tags     Category[] // Many-to-many relation with Category (acting as tags)
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 }
 
 model Comment {
@@ -127,8 +211,8 @@ model Comment {
 }
 
 model CommentLike {
-  userId String
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   commentId String
   comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
@@ -158,10 +242,11 @@ model Company {
   logoUrl     String?
   city        String
   
-  // El usuario que administra esta empresa
   adminId     String   @unique
   admin       User     @relation(fields: [adminId], references: [id])
   
+  // La compañía ahora puede tener muchos eventos
+  events      Event[]
   benefits    Benefit[]
 }
 
@@ -171,18 +256,18 @@ enum BenefitStatus {
 }
 
 enum BenefitUsagePeriod {
-  LIFETIME  // N veces
-  DAILY     // Una vez por día
-  WEEKLY    // Una vez por semana
-  MONTHLY   // Una vez por mes
+  LIFETIME // N veces
+  DAILY // Una vez por día
+  WEEKLY // Una vez por semana
+  MONTHLY // Una vez por mes
 }
 
 model Benefit {
-  id           String   @id @default(cuid())
-  title        String
-  description  String
-  terms        String? // Términos y condiciones
-  status       BenefitStatus @default(AVAILABLE)
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  terms       String? // Términos y condiciones
+  status      BenefitStatus @default(AVAILABLE)
 
   pointCost   Int?
   isNew       Boolean @default(false)
@@ -190,26 +275,28 @@ model Benefit {
   address     String?
   benefitType String?
 
-  usageLimit   Int                @default(1) // Cuántas veces se puede usar en el período
-  limitPeriod  BenefitUsagePeriod @default(LIFETIME) // El período del límite
-  
+  usageLimit  Int                @default(1) // Cuántas veces se puede usar en el período
+  limitPeriod BenefitUsagePeriod @default(LIFETIME) // El período del límite
+
   // Relations
-  categories   Category[]
-  companyId    String
-  company      Company  @relation(fields: [companyId], references: [id])
-  
-  redemptions  BenefitRedemption[]
+  categories Category[]
+  companyId  String
+  company    Company    @relation(fields: [companyId], references: [id])
+
+  redemptions BenefitRedemption[]
+
+  Event Event[]
 }
 
 model BenefitRedemption {
-  id          String    @id @default(cuid())
-  token       String    @unique // El token de un solo uso
-  expiresAt   DateTime  // Cuándo expira el token
-  redeemedAt  DateTime? // Cuándo fue canjeado
-  
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  
-  benefitId   String
-  benefit     Benefit   @relation(fields: [benefitId], references: [id])
+  id         String    @id @default(cuid())
+  token      String    @unique // El token de un solo uso
+  expiresAt  DateTime // Cuándo expira el token
+  redeemedAt DateTime? // Cuándo fue canjeado
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  benefitId String
+  benefit   Benefit @relation(fields: [benefitId], references: [id])
 }
