@@ -10,7 +10,7 @@ export const createBenefitController = async (req: Request, res: Response) => {
   } catch (error: any) {
     // Manejamos el error específico de "empresa no encontrada" para dar una mejor respuesta
     if (error.message.includes("No se encontró ninguna empresa")) {
-        return res.status(404).json({ message: error.message });
+      return res.status(404).json({ message: error.message });
     }
     // Para cualquier otro error, devolvemos un 500
     res.status(500).json({ message: error.message });
@@ -46,6 +46,23 @@ export const createEventController = async (req: AuthRequest, res: Response) => 
     // `req.files` ahora es un array de archivos
     const files = req.files as Express.Multer.File[] | undefined;
 
+    // Verificamos si 'tickets' es un string y lo parseamos a un objeto/array.
+    if (eventData.tickets && typeof eventData.tickets === 'string') {
+      try {
+        eventData.tickets = JSON.parse(eventData.tickets);
+      } catch (e) {
+        return res.status(400).json({ message: 'El formato de los tickets es inválido.' });
+      }
+    }
+
+    // Nos aseguramos de que los campos numéricos se conviertan correctamente.
+    if (Array.isArray(eventData.tickets)) {
+      eventData.tickets.forEach((ticket: any) => {
+        ticket.priceInCents = parseInt(String(ticket.priceInCents), 10);
+        ticket.quantity = parseInt(String(ticket.quantity), 10);
+      });
+    }
+
     const event = await AdminService.createEvent(eventData, files);
     res.status(201).json(event);
   } catch (error: any) {
@@ -73,10 +90,10 @@ export const createCompanyController = async (req: AuthRequest, res: Response) =
 };
 
 export const getAllCompaniesController = async (req: AuthRequest, res: Response) => {
-    try {
-        const companies = await AdminService.findAllCompanies();
-        res.status(200).json(companies);
-    } catch (error: any) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+    const companies = await AdminService.findAllCompanies();
+    res.status(200).json(companies);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
 };

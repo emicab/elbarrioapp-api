@@ -68,29 +68,44 @@ export const createChannel = async (data: { name: string; slug: string; descript
 };
 
 export const createEvent = async (data: CreateEventData, files?: Express.Multer.File[]) => {
-  const { organizerId, companyId, ...eventData } = data;
+  const { organizerId, companyId, tickets, ...eventData } = data;
   
-  const imageUrls: string[] = [];
-
-  // Si hay archivos, los subimos uno por uno
-  if (files && files.length > 0) {
-    for (const file of files) {
-      const url = await uploadImage(file.buffer, 'eventclub_events');
-      imageUrls.push(url);
+  // Usamos una transacción para asegurar que todo se cree correctamente
+  return prisma.$transaction(async (tx) => {
+    const imageUrls: string[] = [];
+    if (files && files.length > 0) {
+      for (const file of files) {
+        const url = await uploadImage(file.buffer, 'eventclub_events');
+        imageUrls.push(url);
+      }
     }
-  }
 
-  return prisma.event.create({
-    data: {
-      ...eventData,
-      price: Number(data.price) || 0,
-      date: new Date(data.date),
-      imageUrls: imageUrls, // Guardamos el array de URLs
-      organizer: { connect: { id: organizerId } },
-      company: { connect: { id: companyId } },
-      latitude: 0,
-      longitude: 0,
-    },
+    // 1. Creamos el evento principal
+    const newEvent = await tx.event.create({
+      data: {
+        ...eventData,
+        date: new Date(data.date),
+        imageUrls: imageUrls,
+        organizer: { connect: { id: organizerId } },
+        company: { connect: { id: companyId } },
+        latitude: Number(data.latitude),
+        longitude: Number(data.longitude),
+      },
+    });
+
+    console.log("tickets__ ", tickets)
+    // 2. Si se proporcionaron tickets, los creamos y los asociamos al nuevo evento
+    if (tickets && tickets.length > 0) {
+      const ticketTypesData = tickets.map(ticket => ({
+        ...ticket,
+        eventId: newEvent.id, // Vinculamos cada tipo de ticket al evento recién creado
+      }));
+      await tx.ticketType.createMany({
+        data: ticketTypesData,
+      });
+    }
+
+    return newEvent;
   });
 };
 

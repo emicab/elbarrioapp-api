@@ -1,5 +1,4 @@
 import { prisma } from '../../lib/prisma';
-import { CreateEventData } from '../../utils/types';
 import { _getUsageCount } from '../benefits/benefit.service';
 import { uploadImage } from '../users/user.service';
 
@@ -10,48 +9,56 @@ interface UpdateEventInput {
   // ...otros campos
 }
 
-export const createEvent = async (data: CreateEventData, imageBuffer?: Buffer) => {
-  let imageUrls: string[] = [];
+type CreateEventData = {
+  title: string;
+  description: string;
+  date: string;
+  city: string;
+  address: string;
+  price?: number;
+  organizerId: string;
+  companyId: string;
+  latitude: number;
+  longitude: number;
+};
 
-  if (imageBuffer) {
-    const url = await uploadImage(imageBuffer, 'eventclub_events');
-    imageUrls.push(url);
-  }
-
-  // --- CORRECCIÓN CLAVE ---
-  // Desestructuramos los IDs de las relaciones del resto de los datos.
+export const createEvent = async (data: CreateEventData, files?: Express.Multer.File[]) => {
+  // Desestructuramos los IDs de las relaciones y los datos del evento
   const { organizerId, companyId, ...eventData } = data;
 
-  // Verificamos que la compañía pertenezca al organizador para mayor seguridad
+  // Verificación de seguridad: Asegurarnos de que el productor solo pueda
+  // crear eventos para una compañía que le pertenece.
   const company = await prisma.company.findFirst({
     where: {
       id: companyId,
-      adminId: organizerId, // Solo puede crear eventos para su propia compañía
+      adminId: organizerId, // El organizador debe ser el admin de la compañía
     },
   });
 
   if (!company) {
-    throw new Error('Compañía no encontrada o no tienes permiso sobre ella.');
+    throw new Error('Compañía no encontrada o no tienes permiso para crear eventos para ella.');
   }
 
+  let imageUrls: string[] = [];
+  if (files && files.length > 0) {
+    for (const file of files) {
+      const url = await uploadImage(file.buffer, 'eventclub_events');
+      imageUrls.push(url);
+    }
+  }
+
+  // Usamos la sintaxis `connect` para establecer las relaciones correctamente
   return prisma.event.create({
     data: {
       ...eventData,
-      price: Number(data.price) || 0,
       date: new Date(data.date),
       imageUrls: imageUrls,
-
-      // Le decimos a Prisma que conecte las relaciones explícitamente.
       organizer: {
         connect: { id: organizerId },
       },
       company: {
         connect: { id: companyId },
       },
-
-      // Valores temporales para lat/lon
-      latitude: Number(data.latitude) || 0,
-      longitude: Number(data.longitude) || 0,
     },
   });
 };
@@ -72,7 +79,8 @@ export const findAllEvents = async (city?: string) => {
       },
       company: {
         select: { name: true, id: true }
-      }
+      },
+      tickets: true
     }
   });
 };
@@ -83,7 +91,8 @@ export const findEventById = async (eventId: string) => {
     include: {
       organizer: {
         select: { firstName: true, lastName: true, id: true, profile: true }
-      }
+      },
+      tickets: true
     }
   });
   if (!event) throw new Error('Evento no encontrado');
@@ -152,7 +161,7 @@ export const findEventByIdForUser = async (eventId: string, userId: string) => {
       // INCLUSIÓN CLAVE: Traemos los tipos de entradas asociados al evento.
       tickets: {
         orderBy: {
-          price: 'asc' // Ordenamos por precio, de más barato a más caro
+          priceInCents: 'asc' // Ordenamos por precio, de más barato a más caro
         }
       }
     }

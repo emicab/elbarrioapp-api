@@ -37,7 +37,7 @@ model User {
   Company           Company[]
   BenefitRedemption BenefitRedemption[]
 
-  CommentLike CommentLike[]
+  CommentLike        CommentLike[]
   channelMemberships ChannelMembership[]
 
   Order Order[]
@@ -68,7 +68,7 @@ model Profile {
 // --- Event Models ---
 
 model Event {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String
   date        DateTime
@@ -76,63 +76,87 @@ model Event {
   city        String?
   latitude    Float
   longitude   Float
-  price       Float?    @default(0)
   imageUrls   String[]
   place       String?
 
   // --- RELACIONES CLAVE ---
 
   organizerId String
-  organizer   User      @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+  organizer   User   @relation(fields: [organizerId], references: [id], onDelete: Cascade)
 
-  companyId   String
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-
-  categories  Category[]
-  benefits    Benefit[]
-  tickets     TicketType[]
+  categories Category[]
+  benefits   Benefit[]
+  tickets    TicketType[]
 }
 
 model TicketType {
-  id        String   @id @default(cuid())
-  name      String   // El nombre del tipo de entrada, ej: "Entrada General", "VIP", "Early Bird"
-  price     Float    // El precio de este tipo de entrada en la moneda base (ej. USD)
-  quantity  Int      // La cantidad total de entradas de este tipo disponibles
-  
+  id          String @id @default(cuid())
+  name        String // El nombre del tipo de entrada, ej: "Entrada General", "VIP", "Early Bird"
+  priceInCents Int // El precio de este tipo de entrada en la moneda base (ej. USD)
+  quantity    Int // La cantidad total de entradas de este tipo disponibles
+  currency    String @default("usd")
+
   // Relación: Cada tipo de entrada pertenece a un evento específico
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
   // Relación: Un tipo de entrada puede tener muchas entradas individuales vendidas
-  tickets   Ticket[]
+  tickets Ticket[]
+}
+
+enum TicketStatus {
+  VALID     // La entrada es válida y está lista para ser usada.
+  USED      // La entrada ya fue escaneada y utilizada.
+  CANCELLED // La entrada fue cancelada (ej. por una devolución).
+  EXPIRED   // El evento ya pasó y la entrada no se usó.
 }
 
 model Ticket {
   id          String   @id @default(cuid())
-  qrCode      String   @unique // Un código único para el QR de la entrada
-  status      String   @default("VALID") // ej: "VALID", "USED", "CANCELLED"
+  qrCode      String   @unique
   
+  // El estado actual de la entrada, para controlar su validez.
+  status      TicketStatus @default(VALID)
+  
+  // --- CAMPOS DE AUDITORÍA Y SEGURIDAD ---
+  scannedAt     DateTime? // Hora exacta del escaneo.
+  scannedByIp   String?   // Dirección IP del dispositivo que realizó el escaneo.
+  scannedByUserAgent String?   // Información del navegador/OS del dispositivo que escaneó.
+  
+  // --- INFORMACIÓN DEL ASISTENTE (Opcional) ---
+  attendeeName String?
+  attendeeDni  String?
+  
+  
+  // --- RELACIONES CLAVE ---
+  
+  // Relación con el tipo de entrada (ej. "VIP", "General Admission").
+  // Esto nos permite saber qué se compró y a qué precio.
   ticketTypeId String
-  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
   
+  // Relación con la orden de compra a la que pertenece.
+  // Esto vincula la entrada con la transacción de pago y el comprador.
   orderId     String
-  order       Order    @relation(fields: [orderId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 // 3. Un modelo para agrupar las entradas de una misma compra
 model Order {
-  id              String   @id @default(cuid())
-  amount          Float    // Monto total de la compra
-  currency        String   @default("usd")
-  status          String   // ej: "PENDING", "COMPLETED", "FAILED"
+  id                    String @id @default(cuid())
+  amount                Float // Monto total de la compra
+  currency              String @default("usd")
+  status                String // ej: "PENDING", "COMPLETED", "FAILED"
   stripePaymentIntentId String @unique // El ID del Payment Intent de Stripe
-  
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  
-  tickets         Ticket[]
-  createdAt       DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tickets   Ticket[]
+  createdAt DateTime @default(now())
 }
 
 model Category {
@@ -162,18 +186,18 @@ model Channel {
   iconName    String?
   isPrivate   Boolean @default(false)
 
-  post Post[]
-  members   ChannelMembership[]
+  post    Post[]
+  members ChannelMembership[]
 }
 
 model ChannelMembership {
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channelId String
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channel   Channel                 @relation(fields: [channelId], references: [id], onDelete: Cascade)
   status    ChannelMembershipStatus @default(MEMBER)
 
-  joinedAt  DateTime @default(now())
+  joinedAt DateTime @default(now())
 
   @@id([userId, channelId])
 }
@@ -181,7 +205,7 @@ model ChannelMembership {
 model Post {
   id        String   @id @default(cuid())
   content   String
-  imageUrls  String[]
+  imageUrls String[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -236,18 +260,18 @@ model Like {
 }
 
 model Company {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
   logoUrl     String?
   city        String
-  
-  adminId     String   @unique
-  admin       User     @relation(fields: [adminId], references: [id])
-  
+
+  adminId String @unique
+  admin   User   @relation(fields: [adminId], references: [id])
+
   // La compañía ahora puede tener muchos eventos
-  events      Event[]
-  benefits    Benefit[]
+  events   Event[]
+  benefits Benefit[]
 }
 
 enum BenefitStatus {

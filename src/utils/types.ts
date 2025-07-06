@@ -14,7 +14,14 @@ export type UpdateProfileData = {
   cvUrl?: string;
 }
 
+type TicketTypeInput = {
+  name: string;
+  priceInCents: number;
+  quantity: number;
+};
+
 export type CreateEventData = {
+  place: string;
   longitude: number;
   latitude: number;
   title: string;
@@ -25,6 +32,7 @@ export type CreateEventData = {
   price?: number;
   organizerId: string;
   companyId: string;
+  tickets?: TicketTypeInput[]
 };
 
 export type CreateCompanyData = {
