@@ -133,3 +133,34 @@ export const updatePushToken = async (userId: string, token: string) => {
       data: { pushToken: token },
     });
   };
+
+  export const findUserFavoriteEvents = async (userId: string) => {
+    const favorites = await prisma.favoriteEvent.findMany({
+      where: { userId },
+      orderBy: {
+        event: {
+          date: 'asc', // Ordenamos los favoritos por la fecha del evento
+        },
+      },
+      include: {
+        event: { // Incluimos el objeto completo del evento
+          include: { // Anidamos los includes que necesites para la EventCard
+            organizer: {
+              select: { firstName: true, lastName: true },
+            },
+            _count: {
+              select: { FavoriteEvent: true },
+            },
+          },
+        },
+      },
+    });
+  
+    // Mapeamos para devolver solo la información del evento,
+    // y añadimos el campo 'isFavoritedByCurrentUser' como true en todos,
+    // porque si están en esta lista, por definición son favoritos.
+    return favorites.map(fav => ({
+      ...fav.event,
+      isFavoritedByCurrentUser: true,
+    }));
+  };

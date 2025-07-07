@@ -5,14 +5,15 @@ import {
   createEventController, 
   getAllEventsController, 
   getEventByIdController, 
-  getNearbyEventsController 
+  getNearbyEventsController, 
+  toggleFavoriteController
 } from './event.controller';
 
 const router = Router();
 
 // --- Rutas Públicas ---
 // Obtener todos los eventos
-router.get('/', getAllEventsController);
+router.get('/', isAuthenticated, getAllEventsController);
 
 // Obtener eventos cercanos por geolocalización
 router.get('/nearby', getNearbyEventsController);
@@ -24,6 +25,7 @@ router.get('/:id', isAuthenticated, getEventByIdController);
 // --- Rutas Protegidas (Solo para Productores) ---
 // Crear un nuevo evento
 router.post('/', isAuthenticated, isProducer, createEventController);
+router.post('/:id/favorite', isAuthenticated, toggleFavoriteController);
 
 // Actualizar un evento (TODO)
 // router.put('/:id', isAuthenticated, isProducer, updateEventController);

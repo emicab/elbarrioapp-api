@@ -6,7 +6,6 @@ interface UpdateEventInput {
   title?: string;
   description?: string;
   date?: string;
-  // ...otros campos
 }
 
 type CreateEventData = {
@@ -63,12 +62,10 @@ export const createEvent = async (data: CreateEventData, files?: Express.Multer.
   });
 };
 
-export const findAllEvents = async (city?: string) => {
-
+export const findAllEvents = async (city?: string, userId?: string) => {
   const whereClause = city ? { city: city } : {};
 
-  // Aquí se podrían añadir filtros por ciudad, categoría, etc.
-  return await prisma.event.findMany({
+  const events = await prisma.event.findMany({
     where: whereClause,
     orderBy: {
       date: 'asc',
@@ -80,9 +77,35 @@ export const findAllEvents = async (city?: string) => {
       company: {
         select: { name: true, id: true }
       },
-      tickets: true
+      tickets: true,
+      _count: {
+        select: {
+          FavoriteEvent: true
+        }
+      }
     }
   });
+
+  if (!userId) {
+    return events.map(event => ({
+      ...event,
+      isFavoritedByCurrentUser: false,
+    }));
+  }
+
+  // Obtenemos TODOS los IDs de los eventos favoritos del usuario de UNA SOLA VEZ.
+  const userFavorites = await prisma.favoriteEvent.findMany({
+    where: { userId },
+    select: { eventId: true },
+  });
+  // Creamos un Set para una búsqueda casi instantánea (mucho más rápido que un find en un array)
+  const favoriteEventIds = new Set(userFavorites.map(fav => fav.eventId));
+
+  // Mapeamos los eventos y añadimos el campo booleano dinámicamente.
+  return events.map(event => ({
+    ...event,
+    isFavoritedByCurrentUser: favoriteEventIds.has(event.id),
+  }));
 };
 
 export const findEventById = async (eventId: string) => {
@@ -138,51 +161,92 @@ export const findEventsNearby = async (lat: number, lon: number, radiusInKm: num
   return events;
 };
 
-export const findEventByIdForUser = async (eventId: string, userId: string) => {
+export const findEventByIdForUser = async (eventId: string, userId?: string) => {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
-      organizer: { 
-        select: 
-          { 
-            firstName: true, 
-            lastName: true, 
-            id: true, 
-            profile: {
-              select: {
-                avatarUrl: true,
-                phone: true
-              }
-            }
-          } 
+      organizer: {
+        select: {
+          firstName: true,
+          lastName: true,
+          id: true,
+          profile: {
+            select: {
+              avatarUrl: true,
+              phone: true,
+            },
+          },
         },
+      },
       company: { select: { name: true, logoUrl: true } },
       benefits: true,
-      // INCLUSIÓN CLAVE: Traemos los tipos de entradas asociados al evento.
       tickets: {
         orderBy: {
-          priceInCents: 'asc' // Ordenamos por precio, de más barato a más caro
-        }
-      }
-    }
+          priceInCents: 'asc',
+        },
+      },
+      _count: {
+        select: {
+          FavoriteEvent: true, // Corregido para usar el nombre de la relación
+        },
+      },
+    },
   });
 
   if (!event) {
     throw new Error('Evento no encontrado.');
   }
 
-  const benefitsWithUsage = await Promise.all(
-    event.benefits.map(async (benefit) => {
-      const timesUsed = await _getUsageCount(benefit, userId);
-      return {
-        ...benefit, // Mantenemos todos los datos del beneficio
-        isUsed: timesUsed >= benefit.usageLimit,
-      };
+  // 1. Lógica de Favoritos (se ejecuta en paralelo)
+  const favoriteCheck = userId
+    ? prisma.favoriteEvent.findUnique({
+      where: { userId_eventId: { userId, eventId } },
     })
-  );
+    : Promise.resolve(null);
 
+  // 2. Lógica de Beneficios (se ejecuta en paralelo)
+  const benefitsWithUsageCheck = userId
+    ? Promise.all(
+      event.benefits.map(async (benefit) => {
+        const timesUsed = await _getUsageCount(benefit, userId); // Asumo que _getUsageCount existe
+        return {
+          ...benefit,
+          isUsed: timesUsed >= benefit.usageLimit,
+        };
+      })
+    )
+    : Promise.resolve(event.benefits.map(b => ({ ...b, isUsed: false }))); // Si no hay usuario, ningún beneficio está usado
+
+  // Esperamos a que ambas operaciones asíncronas terminen
+  const [isFavorited, benefitsWithUsage] = await Promise.all([
+    favoriteCheck,
+    benefitsWithUsageCheck,
+  ]);
+
+  // Devolvemos el objeto final y enriquecido
   return {
     ...event,
     benefits: benefitsWithUsage,
+    isFavoritedByCurrentUser: !!isFavorited, // Convertimos el resultado (null o el objeto) a un booleano
   };
+};
+
+export const toggleFavoriteEvent = async (userId: string, eventId: string) => {
+  const favorite = await prisma.favoriteEvent.findUnique({
+    where: {
+      userId_eventId: { userId, eventId },
+    },
+  })
+
+  if (favorite) {
+    await prisma.favoriteEvent.delete({
+      where: { userId_eventId: { userId, eventId } },
+    });
+    return { favorited: false };
+  } else {
+    await prisma.favoriteEvent.create({
+      data: { userId, eventId },
+    });
+    return { favorited: true };
+  }
 };

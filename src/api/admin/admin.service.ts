@@ -98,6 +98,7 @@ export const createEvent = async (data: CreateEventData, files?: Express.Multer.
     if (tickets && tickets.length > 0) {
       const ticketTypesData = tickets.map(ticket => ({
         ...ticket,
+        currency: ticket.currency,
         eventId: newEvent.id, // Vinculamos cada tipo de ticket al evento recién creado
       }));
       await tx.ticketType.createMany({

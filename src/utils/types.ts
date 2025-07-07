@@ -15,6 +15,7 @@ export type UpdateProfileData = {
 }
 
 type TicketTypeInput = {
+  currency: string;
   name: string;
   priceInCents: number;
   quantity: number;

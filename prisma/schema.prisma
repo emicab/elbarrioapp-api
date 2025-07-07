@@ -41,6 +41,36 @@ model User {
   channelMemberships ChannelMembership[]
 
   Order Order[]
+
+  FavoriteEvent FavoriteEvent[]
+
+  receivedFriendRequests      Friendship[] @relation("receivedFriendRequests")
+  sentFriendRequests  Friendship[] @relation("sentFriendRequests")
+
+  conversations Conversation[]
+  messagesSent  Message[]
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+model Friendship {
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relaciones
+  requester User @relation("sentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("receivedFriendRequests", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@id([requesterId, addresseeId])
+  @@map("friendships")
 }
 
 model Profile {
@@ -90,6 +120,19 @@ model Event {
   categories Category[]
   benefits   Benefit[]
   tickets    TicketType[]
+
+  FavoriteEvent FavoriteEvent[]
+}
+
+model FavoriteEvent {
+  userId String
+  eventId String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventId])
 }
 
 model TicketType {
@@ -323,4 +366,50 @@ model BenefitRedemption {
 
   benefitId String
   benefit   Benefit @relation(fields: [benefitId], references: [id])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relación con los usuarios que participan en la conversación
+  participants User[]
+  
+  // Relación con los mensajes de esta conversación
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+
+  // --- INICIO DE LAS MEJORAS ---
+
+  // 1. Hacemos el texto opcional para permitir otros tipos de mensajes
+  text      String?   @db.Text 
+  
+  // 2. Añadimos un campo para el tipo de mensaje (para la Opción 2)
+  type      String    @default("TEXT") // "TEXT", "EVENT_SHARE", etc.
+  
+  // 3. Añadimos un campo para el estado de lectura (para el Doble Check)
+  status    MessageStatus @default(SENT)
+
+  // --- FIN DE LAS MEJORAS ---
+
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@map("messages")
 }

@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { NextFunction, Response } from 'express';
 import { AuthRequest } from '../../middlewares/isAuthenticated';
 import * as EventService from './event.service';
 
@@ -18,7 +18,8 @@ export const createEventController = async (req: AuthRequest, res: Response) => 
 export const getAllEventsController = async (req: AuthRequest, res: Response) => {
   try {
     const { city } = req.query;
-    const events = await EventService.findAllEvents(city as string | undefined);
+    const userId = (req as any).user?.userId;
+    const events = await EventService.findAllEvents(city as string, userId);
     res.status(200).json(events);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -27,19 +28,21 @@ export const getAllEventsController = async (req: AuthRequest, res: Response) =>
 
 export const getEventByIdController = async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.id;
     const eventId = req.params.id as string;
 
-    if (!userId) return res.status(400).json({ message: 'ID de usuario no encontrado.' });
+    // if (!userId) return res.status(400).json({ message: 'ID de usuario no encontrado.' });
 
     const event = await EventService.findEventByIdForUser(eventId, userId);
+    if (!event) {
+      return res.status(404).json({ message: 'Evento no encontrado' });
+    }
     res.status(200).json(event);
   } catch (error: any) {
+    console.error('ERROR REAL EN getEventByIdController:', error);
     res.status(404).json({ message: error.message });
   }
 };
-
-// ... más controladores
 
 export const getNearbyEventsController = async (req: AuthRequest, res: Response) => {
   try {
@@ -51,5 +54,18 @@ export const getNearbyEventsController = async (req: AuthRequest, res: Response)
     res.status(200).json(events);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+export const toggleFavoriteController = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id: eventId } = req.params;    
+    const { userId } = (req as any).user;
+
+    const result = await EventService.toggleFavoriteEvent(userId, eventId);
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
   }
 };

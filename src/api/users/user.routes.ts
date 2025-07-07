@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getMeController,
   getUserByIdController,
+  getUserFavoriteEventsController,
   updateMeController,
   updatePushTokenController,
   uploadAvatarController
@@ -15,6 +16,8 @@ const router = Router();
 
 // GET /api/users/me -> Obtener el perfil del usuario logueado.
 router.get('/me', isAuthenticated, getMeController);
+router.get('/me/favorite-events', isAuthenticated, getUserFavoriteEventsController);
+
 
 // PUT /api/users/me -> Actualizar la biografía del usuario logueado.
 router.put('/me', isAuthenticated, updateMeController);
