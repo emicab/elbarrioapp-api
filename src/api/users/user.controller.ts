@@ -116,3 +116,16 @@ export const getUserFavoriteEventsController = async (req: AuthRequest, res: Res
         next(error);
     }
 };
+
+/**
+ * Obtiene el historial de beneficios canjeados por el usuario.
+ */
+export const getBenefitHistoryController = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+        const { userId } = (req as any).user;
+        const history = await UserService.findUserBenefitHistory(userId);
+        res.status(200).json(history);
+    } catch (error) {
+        next(error);
+    }
+};

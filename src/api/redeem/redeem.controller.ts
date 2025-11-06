@@ -49,12 +49,14 @@ export const redeemTokenController = async (req: Request, res: Response) => {
     return res.status(404).send(html);
   }
 
-  await RedeemService.markTokenAsRedeemed(token);
-  
-  // Emitimos el evento a la sala privada del usuario para notificar en tiempo real
+  await RedeemService.markTokenAsRedeemed(token, redemption.claimedBenefitId);
+
+  // --- ¡AQUÍ ESTÁ LA LÓGICA CLAVE! ---
+  // Emitimos un evento a la "sala" privada del usuario
   io.to(redemption.userId).emit('redemption:success', {
-      message: `Tu beneficio "${redemption.benefit.title}" ha sido canjeado.`,
-      benefitId: redemption.benefitId
+    message: `Tu beneficio "${redemption.benefit.title}" ha sido canjeado.`,
+    benefitId: redemption.benefitId,
+    claimedId: redemption.claimedBenefitId
   });
 
   const html = generateHtmlResponse({

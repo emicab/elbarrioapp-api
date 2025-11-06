@@ -27,6 +27,9 @@ model User {
   pushToken  String? @unique
   isVerified Boolean @default(false)
 
+  emailVerified     DateTime? // Guardará la fecha y hora de verificación. Si es null, no está verificado.
+  verificationToken String?   @unique // Token único para la verificación
+
   // Relations
   profile  Profile?
   events   Event[]
@@ -44,11 +47,13 @@ model User {
 
   FavoriteEvent FavoriteEvent[]
 
-  receivedFriendRequests      Friendship[] @relation("receivedFriendRequests")
-  sentFriendRequests  Friendship[] @relation("sentFriendRequests")
+  receivedFriendRequests Friendship[] @relation("receivedFriendRequests")
+  sentFriendRequests     Friendship[] @relation("sentFriendRequests")
 
   conversations Conversation[]
   messagesSent  Message[]
+
+  ClaimedBenefit ClaimedBenefit[]
 }
 
 enum FriendshipStatus {
@@ -125,22 +130,22 @@ model Event {
 }
 
 model FavoriteEvent {
-  userId String
-  eventId String
+  userId    String
+  eventId   String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@id([userId, eventId])
 }
 
 model TicketType {
-  id          String @id @default(cuid())
-  name        String // El nombre del tipo de entrada, ej: "Entrada General", "VIP", "Early Bird"
+  id           String @id @default(cuid())
+  name         String // El nombre del tipo de entrada, ej: "Entrada General", "VIP", "Early Bird"
   priceInCents Int // El precio de este tipo de entrada en la moneda base (ej. USD)
-  quantity    Int // La cantidad total de entradas de este tipo disponibles
-  currency    String @default("usd")
+  quantity     Int // La cantidad total de entradas de este tipo disponibles
+  currency     String @default("usd")
 
   // Relación: Cada tipo de entrada pertenece a un evento específico
   eventId String
@@ -151,40 +156,39 @@ model TicketType {
 }
 
 enum TicketStatus {
-  VALID     // La entrada es válida y está lista para ser usada.
-  USED      // La entrada ya fue escaneada y utilizada.
+  VALID // La entrada es válida y está lista para ser usada.
+  USED // La entrada ya fue escaneada y utilizada.
   CANCELLED // La entrada fue cancelada (ej. por una devolución).
-  EXPIRED   // El evento ya pasó y la entrada no se usó.
+  EXPIRED // El evento ya pasó y la entrada no se usó.
 }
 
 model Ticket {
-  id          String   @id @default(cuid())
-  qrCode      String   @unique
-  
+  id     String @id @default(cuid())
+  qrCode String @unique
+
   // El estado actual de la entrada, para controlar su validez.
-  status      TicketStatus @default(VALID)
-  
+  status TicketStatus @default(VALID)
+
   // --- CAMPOS DE AUDITORÍA Y SEGURIDAD ---
-  scannedAt     DateTime? // Hora exacta del escaneo.
-  scannedByIp   String?   // Dirección IP del dispositivo que realizó el escaneo.
-  scannedByUserAgent String?   // Información del navegador/OS del dispositivo que escaneó.
-  
+  scannedAt          DateTime? // Hora exacta del escaneo.
+  scannedByIp        String? // Dirección IP del dispositivo que realizó el escaneo.
+  scannedByUserAgent String? // Información del navegador/OS del dispositivo que escaneó.
+
   // --- INFORMACIÓN DEL ASISTENTE (Opcional) ---
   attendeeName String?
   attendeeDni  String?
-  
-  
+
   // --- RELACIONES CLAVE ---
-  
+
   // Relación con el tipo de entrada (ej. "VIP", "General Admission").
   // Esto nos permite saber qué se compró y a qué precio.
   ticketTypeId String
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
-  
+
   // Relación con la orden de compra a la que pertenece.
   // Esto vincula la entrada con la transacción de pago y el comprador.
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 // 3. Un modelo para agrupar las entradas de una misma compra
@@ -210,7 +214,7 @@ model Category {
   events Event[] // Many-to-many relation with Event
   posts  Post[] // Many-to-many relation with Post (for tags)
 
-  Benefit Benefit[]
+  Benefit Benefit[] @relation("BenefitCategories")
 }
 
 // --- Community Feed Models ---
@@ -309,7 +313,7 @@ model Company {
   logoUrl     String?
   city        String
 
-  adminId String @unique
+  adminId String
   admin   User   @relation(fields: [adminId], references: [id])
 
   // La compañía ahora puede tener muchos eventos
@@ -332,27 +336,24 @@ enum BenefitUsagePeriod {
 model Benefit {
   id          String        @id @default(cuid())
   title       String
-  description String
-  terms       String? // Términos y condiciones
-  status      BenefitStatus @default(AVAILABLE)
+  description String        @db.Text
+  pointCost   Int           @default(0)
+  expiresAt   DateTime?
+  status      BenefitStatus @default(AVAILABLE) // AVAILABLE, EXPIRED, UNAVAILABLE
 
-  pointCost   Int?
-  isNew       Boolean @default(false)
-  isExclusive Boolean @default(false)
-  address     String?
-  benefitType String?
+  // Reglas de uso
+  usageLimit  Int                @default(1)
+  limitPeriod BenefitUsagePeriod @default(LIFETIME)
 
-  usageLimit  Int                @default(1) // Cuántas veces se puede usar en el período
-  limitPeriod BenefitUsagePeriod @default(LIFETIME) // El período del límite
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
 
-  // Relations
-  categories Category[]
-  companyId  String
-  company    Company    @relation(fields: [companyId], references: [id])
+  categories Category[] @relation("BenefitCategories")
+  events     Event[]
 
   redemptions BenefitRedemption[]
 
-  Event Event[]
+  claimedBy ClaimedBenefit[] // Lista de usuarios que lo han reclamado
 }
 
 model BenefitRedemption {
@@ -366,18 +367,42 @@ model BenefitRedemption {
 
   benefitId String
   benefit   Benefit @relation(fields: [benefitId], references: [id])
+
+  // Relación uno a uno: un canje pertenece a un único beneficio reclamado.
+  claimedBenefitId String?         @unique
+  claimedBenefit   ClaimedBenefit? @relation(fields: [claimedBenefitId], references: [id])
+}
+
+model ClaimedBenefit {
+  id        String               @id @default(cuid())
+  createdAt DateTime             @default(now())
+  status    ClaimedBenefitStatus @default(AVAILABLE) // AVAILABLE, USED, EXPIRED
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id])
+  benefitId String
+  benefit   Benefit              @relation(fields: [benefitId], references: [id])
+
+  // Un beneficio reclamado solo puede tener UN intento de canje (un QR) a la vez.
+  redemption BenefitRedemption?
+}
+
+enum ClaimedBenefitStatus {
+  AVAILABLE
+  USED
+  EXPIRED
+  REDEEMED
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relación con los usuarios que participan en la conversación
   participants User[]
-  
+
   // Relación con los mensajes de esta conversación
-  messages     Message[]
+  messages Message[]
 
   @@map("conversations")
 }
@@ -389,27 +414,16 @@ enum MessageStatus {
 }
 
 model Message {
-  id        String    @id @default(cuid())
-  createdAt DateTime  @default(now())
-
-  // --- INICIO DE LAS MEJORAS ---
-
-  // 1. Hacemos el texto opcional para permitir otros tipos de mensajes
-  text      String?   @db.Text 
-  
-  // 2. Añadimos un campo para el tipo de mensaje (para la Opción 2)
-  type      String    @default("TEXT") // "TEXT", "EVENT_SHARE", etc.
-  
-  // 3. Añadimos un campo para el estado de lectura (para el Doble Check)
+  id        String        @id @default(cuid())
+  createdAt DateTime      @default(now())
+  text      String?       @db.Text
+  type      String        @default("TEXT")
   status    MessageStatus @default(SENT)
-
-  // --- FIN DE LAS MEJORAS ---
-
   senderId  String
-  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender    User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
+
   @@map("messages")
 }

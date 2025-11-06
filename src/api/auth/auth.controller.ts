@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { registerService, loginService } from './auth.service';
+import { NextFunction, Request, Response } from 'express';
+import { registerService, loginService, verifyEmail } from './auth.service';
 
 export const registerController = async (req: Request, res: Response) => {
   console.log(req.body)
@@ -26,5 +26,16 @@ export const loginController = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(401).json({ message: error.message }); // 401 Unauthorized para credenciales inválidas
+  }
+};
+
+export const verifyEmailController = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+      const { token } = req.query;
+      await verifyEmail(token as string);
+      // Redirigir a una página de éxito en tu app/web
+      res.redirect(`${process.env.FRONTEND_URL}verification-success`);
+  } catch (error) {
+      next(error);
   }
 };

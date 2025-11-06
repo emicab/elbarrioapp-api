@@ -35,13 +35,14 @@ export const getBenefitsController = async (req: AuthRequest, res: Response) => 
 export const generateQrController = async (req : AuthRequest, res : Response) => {
     try {
         const userId = req.user ?. userId;
-        const {id: benefitId} = req.params;
+        // --- MODIFICADO: ahora es claimedId en lugar de id ---
+        const { claimedId } = req.params;
 
         if (! userId) 
             return res.status(403).json({message: 'Usuario no autenticado.'});
         
-
-        const redemption = await BenefitService.generateRedemptionToken(benefitId, userId);
+        // --- MODIFICADO: Pasamos el claimedId al servicio ---
+        const redemption = await BenefitService.generateRedemptionToken(claimedId, userId);
         res.status(201).json({token: redemption.token, expiresAt: redemption.expiresAt});
 
     } catch (error : any) {
@@ -82,4 +83,57 @@ export const getBenefitByIdController = async (req: AuthRequest, res: Response) 
   } catch (error: any) {
     res.status(404).json({ message: error.message });
   }
+};
+
+// --- NUEVO CONTROLADOR ---
+export const claimBenefitController = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { id: benefitId } = req.params;
+
+        if (!userId) {
+            return res.status(403).json({ message: 'Usuario no autenticado.' });
+        }
+
+        await BenefitService.claimBenefitForUser(benefitId, userId);
+        res.status(200).json({ success: true, message: 'Beneficio reclamado con éxito.' });
+
+    } catch (error: any) {
+        // Devolvemos el mensaje de error específico del servicio
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// --- NUEVO CONTROLADOR ---
+export const getMyClaimedBenefitsController = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(403).json({ message: 'Usuario no autenticado.' });
+        }
+        
+        const claimedBenefits = await BenefitService.findClaimedBenefitsForUser(userId);
+        res.status(200).json(claimedBenefits);
+
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// --- NUEVO CONTROLADOR ---
+export const getClaimedBenefitByIdController = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        const { id: claimedId } = req.params;
+
+        if (!userId) {
+            return res.status(403).json({ message: 'Usuario no autenticado.' });
+        }
+
+        const claimedBenefit = await BenefitService.findClaimedBenefitById(claimedId, userId);
+        res.status(200).json(claimedBenefit);
+
+    } catch (error: any) {
+        res.status(404).json({ message: error.message });
+    }
 };

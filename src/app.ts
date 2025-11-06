@@ -14,6 +14,7 @@ import channelRoutes from './api/channels/channel.routes';
 import orderRoutes from './api/orders/order.routes';
 import ticketRoutes from './api/tickets/ticket.routes';
 import friendRoutes from './api/friends/friend.routes';
+import chatRoutes from './api/chat/chat.routes';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/channels', channelRoutes)
 app.use('/api/orders', orderRoutes);
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/friends', friendRoutes);
+app.use('/api/conversations', chatRoutes);
 
 
 

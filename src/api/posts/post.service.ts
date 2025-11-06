@@ -25,7 +25,7 @@ export const createPost = async (authorId: string, content: string, files?: Expr
     // Si hay archivos, los subimos uno por uno a Cloudinary
     if (files && files.length > 0) {
         for (const file of files) {
-            const imageUrl = await uploadImage(file.buffer, 'eventclub_posts');
+            const imageUrl = await uploadImage(file.buffer, 'ElBarrioApp_posts');
             imageUrls.push(imageUrl);
         }
     }

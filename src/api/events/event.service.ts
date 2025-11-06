@@ -41,7 +41,7 @@ export const createEvent = async (data: CreateEventData, files?: Express.Multer.
   let imageUrls: string[] = [];
   if (files && files.length > 0) {
     for (const file of files) {
-      const url = await uploadImage(file.buffer, 'eventclub_events');
+      const url = await uploadImage(file.buffer, 'ElBarrioApp_events');
       imageUrls.push(url);
     }
   }

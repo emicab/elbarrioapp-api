@@ -4,15 +4,38 @@ import { AuthRequest } from '../../middlewares/isAuthenticated';
 
 export const createBenefitController = async (req: Request, res: Response) => {
   try {
-    // El body de la petición ya viene con el formato correcto desde el frontend
-    const benefit = await AdminService.createBenefit(req.body);
+    // --- Validación y Conversión Mejorada ---
+    const usageLimitRaw = req.body.usageLimit;
+    const pointCostRaw = req.body.pointCost; // Puede ser undefined o ""
+
+    // Validamos usageLimit (asumimos que es obligatorio)
+    const usageLimit = parseInt(usageLimitRaw, 10);
+    if (isNaN(usageLimit) || usageLimit <= 0) {
+      return res.status(400).json({ message: 'El límite de uso debe ser un número positivo.' });
+    }
+
+    // Validamos pointCost (si existe, debe ser un número no negativo)
+    let pointCost: number | undefined = undefined; // Por defecto es undefined
+    if (pointCostRaw !== undefined && pointCostRaw !== null && pointCostRaw !== '') {
+        pointCost = parseInt(pointCostRaw, 10);
+        if (isNaN(pointCost) || pointCost < 0) {
+            return res.status(400).json({ message: 'El costo en puntos debe ser un número no negativo.' });
+        }
+    }
+    // --- Fin Validación ---
+
+    const benefitData = {
+      ...req.body, // Copiamos el resto de los datos
+      usageLimit: usageLimit, // Usamos el valor ya parseado y validado
+      pointCost: pointCost,   // Usamos el valor parseado o undefined
+    };
+
+    const benefit = await AdminService.createBenefit(benefitData);
     res.status(201).json(benefit);
   } catch (error: any) {
-    // Manejamos el error específico de "empresa no encontrada" para dar una mejor respuesta
     if (error.message.includes("No se encontró ninguna empresa")) {
       return res.status(404).json({ message: error.message });
     }
-    // Para cualquier otro error, devolvemos un 500
     res.status(500).json({ message: error.message });
   }
 };
@@ -78,7 +101,10 @@ export const createCompanyController = async (req: AuthRequest, res: Response) =
       return res.status(403).json({ message: 'No autenticado' });
     }
 
-    const companyData = { ...req.body, adminId };
+    const companyData = { 
+      ...req.body,
+      adminId
+    };
     const logoBuffer = req.file?.buffer;
 
     const company = await AdminService.createCompany(companyData, logoBuffer);
@@ -94,6 +120,29 @@ export const getAllCompaniesController = async (req: AuthRequest, res: Response)
     const companies = await AdminService.findAllCompanies();
     res.status(200).json(companies);
   } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateBenefitController = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const benefit = await AdminService.updateBenefit(id, req.body);
+    res.status(200).json(benefit);
+  } catch (error: any) {
+    console.error("Error al actualizar beneficio:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// --- NUEVO CONTROLADOR PARA ELIMINAR ---
+export const deleteBenefitController = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    await AdminService.deleteBenefit(id);
+    res.status(200).json({ message: 'Beneficio eliminado correctamente.' });
+  } catch (error: any) {
+    console.error("Error al eliminar beneficio:", error);
     res.status(500).json({ message: error.message });
   }
 };

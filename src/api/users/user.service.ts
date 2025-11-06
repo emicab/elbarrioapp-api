@@ -90,7 +90,7 @@ export const updateUserProfile = async (userId : string, data : UpdateProfileDat
 export const uploadImage = async (fileBuffer : Buffer, folder?: string) : Promise < string > => {
     return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream({
-            folder: folder ? folder : 'eventclub_avatars',
+            folder: folder ? folder : 'ElBarrioApp_avatars',
             transformation: [
                 {
                     width: 300,
@@ -164,3 +164,39 @@ export const updatePushToken = async (userId: string, token: string) => {
       isFavoritedByCurrentUser: true,
     }));
   };
+
+  /**
+ * Encuentra el historial de beneficios canjeados por un usuario.
+ * @param userId - El ID del usuario.
+ */
+export const findUserBenefitHistory = async (userId: string) => {
+  const redemptions = await prisma.benefitRedemption.findMany({
+      where: {
+          userId: userId,
+          redeemedAt: {
+              not: null, // Solo los que han sido canjeados (no solo generados)
+          },
+      },
+      orderBy: {
+          redeemedAt: 'desc', // Los más recientes primero
+      },
+      include: {
+          benefit: {
+              include: {
+                  company: {
+                      select: {
+                          name: true,
+                          logoUrl: true,
+                      },
+                  },
+              },
+          },
+      },
+  });
+
+  // Mapeamos para devolver una estructura más limpia y útil para el frontend
+  return redemptions.map(redemption => ({
+      ...redemption.benefit,
+      redeemedAt: redemption.redeemedAt, // Añadimos la fecha de canje
+  }));
+};

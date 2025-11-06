@@ -119,44 +119,42 @@ export const findBenefitsByCityForUser = async (city : string, userId : string, 
 
 /**
  * Verifica los límites y genera un token de canje si el usuario puede usar el beneficio.
+ * --- MODIFICADO: Ahora recibe claimedId en lugar de benefitId ---
  */
-export const generateRedemptionToken = async (benefitId : string, userId : string) => {
-    const benefit = await prisma.benefit.findUnique({
+export const generateRedemptionToken = async (claimedId: string, userId: string) => {
+    // 1. VERIFICAMOS QUE EL BENEFICIO HAYA SIDO RECLAMADO Y ESTÉ LISTO PARA USAR
+    const claimedBenefit = await prisma.claimedBenefit.findUnique({
         where: {
-            id: benefitId
-        }
+            id: claimedId,
+            userId: userId, // Condición de seguridad extra
+            status: 'AVAILABLE' // Solo se puede usar si está disponible
+        },
+        include: { benefit: true }
     });
 
-    if (! benefit || benefit.status !== 'AVAILABLE') {
-        throw new Error('Este beneficio no está disponible.');
+    if (!claimedBenefit) {
+        throw new Error('Beneficio no encontrado, no te pertenece o ya ha sido utilizado.');
     }
 
-    // Usamos la misma función auxiliar para verificar los límites
+    const { benefit, benefitId } = claimedBenefit;
+
+    // 2. VERIFICAMOS LÍMITES DE USO (diario, semanal, etc.)
     const usageCount = await _getUsageCount(benefit, userId);
-
     if (usageCount >= benefit.usageLimit) {
-        let errorMessage = 'Límite de uso alcanzado para este beneficio.';
-        if (benefit.limitPeriod === 'DAILY') 
-            errorMessage = 'Ya has usado este beneficio hoy. Vuelve a intentarlo mañana.';
-        
-        if (benefit.limitPeriod === 'WEEKLY') 
-            errorMessage = 'Ya has usado este beneficio esta semana.';
-        
-        if (benefit.limitPeriod === 'MONTHLY') 
-            errorMessage = 'Ya has usado este beneficio este mes.';
-        
-        throw new Error(errorMessage);
+        throw new Error('Has alcanzado el límite de uso para este beneficio.');
     }
 
+    // 3. GENERAMOS EL TOKEN DE CANJE DE UN SOLO USO
     const token = randomBytes(20).toString('hex');
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos de validez
 
     return prisma.benefitRedemption.create({
         data: {
             token,
             expiresAt,
-            benefitId,
-            userId
+            benefit: { connect: { id: benefit.id } },
+            user: { connect: { id: userId } },
+            claimedBenefit: { connect: { id: claimedBenefit.id } },
         }
     });
 };
@@ -196,4 +194,113 @@ export const findBenefitDetailsForUser = async (benefitId : string, userId : str
         timesUsed,
         isUsed: timesUsed >= benefit.usageLimit
     };
+};
+
+
+// --- NUEVO SERVICIO ---
+/**
+ * Reclama un beneficio para un usuario, descuenta puntos y lo marca como 'AVAILABLE'.
+ */
+export const claimBenefitForUser = async (benefitId: string, userId: string) => {
+    return prisma.$transaction(async (tx) => {
+        const user = await tx.user.findUnique({ where: { id: userId } });
+        const benefit = await tx.benefit.findUnique({ where: { id: benefitId } });
+
+        if (!user || !benefit) {
+            throw new Error('Usuario o beneficio no encontrado.');
+        }
+
+        // 1. Verificar si el usuario tiene suficientes puntos
+        if (user.points < benefit.pointCost) {
+            throw new Error('No tienes suficientes puntos para reclamar este beneficio.');
+        }
+
+        // 2. Verificar si el beneficio ya ha sido reclamado y está disponible
+        const existingClaim = await tx.claimedBenefit.findFirst({
+            where: { userId, benefitId, status: 'AVAILABLE' }
+        });
+
+        if (existingClaim) {
+            throw new Error('Ya has reclamado este beneficio y está listo para usar.');
+        }
+
+        // 3. Descontar los puntos al usuario
+        await tx.user.update({
+            where: { id: userId },
+            data: { points: { decrement: benefit.pointCost } }
+        });
+
+        // 4. Crear el registro del beneficio reclamado
+        const claimedBenefit = await tx.claimedBenefit.create({
+            data: {
+                userId,
+                benefitId,
+                status: 'AVAILABLE' // Lo marca como listo para usar
+            }
+        });
+
+        return claimedBenefit;
+    });
+};
+
+
+// --- NUEVO SERVICIO ---
+/**
+ * Encuentra todos los beneficios que un usuario ha reclamado y están listos para usar.
+ */
+export const findClaimedBenefitsForUser = async (userId: string) => {
+    const claimed = await prisma.claimedBenefit.findMany({
+        where: {
+            userId,
+            status: 'AVAILABLE' // Solo los que no han sido canjeados aún
+        },
+        include: {
+            benefit: { // Incluimos la información completa del beneficio original
+                include: {
+                    company: {
+                        select: {
+                            name: true,
+                            logoUrl: true
+                        }
+                    }
+                }
+            }
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+
+    // Devolvemos una lista que es fácil de consumir para el frontend
+    return claimed.map(c => ({
+        ...c.benefit,
+        claimedId: c.id // Pasamos el ID del reclamo por si se necesita
+    }));
+};
+
+
+// --- NUEVO SERVICIO ---
+/**
+ * Encuentra los detalles de un beneficio reclamado específico.
+ */
+export const findClaimedBenefitById = async (claimedId: string, userId: string) => {
+    const claimedBenefit = await prisma.claimedBenefit.findFirst({
+        where: {
+            id: claimedId,
+            userId, // Condición de seguridad para que solo el dueño pueda verlo
+        },
+        include: {
+            benefit: {
+                include: {
+                    company: true,
+                },
+            },
+        },
+    });
+
+    if (!claimedBenefit) {
+        throw new Error("Beneficio reclamado no encontrado o no te pertenece.");
+    }
+
+    return claimedBenefit;
 };

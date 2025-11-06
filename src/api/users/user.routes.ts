@@ -5,7 +5,8 @@ import {
   getUserFavoriteEventsController,
   updateMeController,
   updatePushTokenController,
-  uploadAvatarController
+  uploadAvatarController,
+  getBenefitHistoryController
 } from './user.controller';
 import { isAuthenticated } from '../../middlewares/isAuthenticated';
 import upload from '../../middlewares/multerUpload';
@@ -17,6 +18,7 @@ const router = Router();
 // GET /api/users/me -> Obtener el perfil del usuario logueado.
 router.get('/me', isAuthenticated, getMeController);
 router.get('/me/favorite-events', isAuthenticated, getUserFavoriteEventsController);
+router.get('/me/benefits-history', isAuthenticated, getBenefitHistoryController);
 
 
 // PUT /api/users/me -> Actualizar la biografía del usuario logueado.
