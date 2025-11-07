@@ -7,7 +7,7 @@
     "dev:nodemon": "nodemon",
     "dev": "nodemon --ext 'ts,json' --exec 'ts-node ./src/index.ts'",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/server.js",
     "postinstall": "npx prisma generate"
   },
   "keywords": [],
