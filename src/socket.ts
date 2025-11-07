@@ -10,7 +10,11 @@ export let io: Server;
 export const initSocketServer = (server: HttpServer) => {
   io = new Server(server, {
     cors: {
-      origin: '*', // En producción, deberías restringir esto al dominio de tu app
+      origin: [
+        'https://elbarrioapp.vercel.app', // tu frontend deployado (React / Expo web)
+        'https://elbarrioapp-api.onrender.com', // backend
+        'exp://127.0.0.1:19000', // modo desarrollo Expo local
+      ], 
       methods: ['GET', 'POST'],
     },
   });
