@@ -18,6 +18,7 @@ import chatRoutes from './api/chat/chat.routes';
 
 const app = express();
 
+app.set('trust proxy', true);
 // Middlewares básicos
 app.use(cors());
 app.use(express.json());

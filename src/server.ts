@@ -5,12 +5,12 @@ import { initSocketServer } from './socket'; // <-- 1. Importar nuestro iniciali
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || '3001';
 const server = http.createServer(app);
 
 // --- INICIO DE LA MODIFICACIÓN ---
 // 2. Inicializamos el servidor de sockets y le pasamos nuestro servidor HTTP
-const io = initSocketServer(server); 
+initSocketServer(server); 
 // --- FIN DE LA MODIFICACIÓN ---
 
 server.listen(PORT, () => {

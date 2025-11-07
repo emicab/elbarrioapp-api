@@ -34,6 +34,7 @@ export const showRedeemPageController = async (req: Request, res: Response) => {
         form: formHtml
     });
     res.status(200).send(html);
+    
 };
 
 export const redeemTokenController = async (req: Request, res: Response) => {

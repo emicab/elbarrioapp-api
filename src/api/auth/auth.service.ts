@@ -22,6 +22,7 @@ export const registerService = async (input: any) => {
       firstName: input.firstName,
       lastName: input.lastName,
       password: hashedPassword,
+      points: 4000,
       // verificationToken: verificationToken,
     },
   });

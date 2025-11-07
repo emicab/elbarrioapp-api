@@ -250,10 +250,7 @@ export const claimBenefitForUser = async (benefitId: string, userId: string) => 
  */
 export const findClaimedBenefitsForUser = async (userId: string) => {
     const claimed = await prisma.claimedBenefit.findMany({
-        where: {
-            userId,
-            status: 'AVAILABLE' // Solo los que no han sido canjeados aún
-        },
+        where: {userId, status: 'AVAILABLE'},
         include: {
             benefit: { // Incluimos la información completa del beneficio original
                 include: {
@@ -274,6 +271,7 @@ export const findClaimedBenefitsForUser = async (userId: string) => {
     // Devolvemos una lista que es fácil de consumir para el frontend
     return claimed.map(c => ({
         ...c.benefit,
+        claimedStatus: c.status,
         claimedId: c.id // Pasamos el ID del reclamo por si se necesita
     }));
 };

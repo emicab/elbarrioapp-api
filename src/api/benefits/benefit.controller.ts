@@ -1,6 +1,7 @@
 import {Request, Response} from 'express';
 import {AuthRequest} from '../../middlewares/isAuthenticated';
 import * as BenefitService from './benefit.service';
+import { prisma } from '../../lib/prisma';
 
 export const getBenefitsController = async (req: AuthRequest, res: Response) => {
     try {
@@ -32,23 +33,48 @@ export const getBenefitsController = async (req: AuthRequest, res: Response) => 
     }
 };
 
-export const generateQrController = async (req : AuthRequest, res : Response) => {
+export const generateQrController = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user ?. userId;
-        // --- MODIFICADO: ahora es claimedId en lugar de id ---
-        const { claimedId } = req.params;
-
-        if (! userId) 
-            return res.status(403).json({message: 'Usuario no autenticado.'});
-        
-        // --- MODIFICADO: Pasamos el claimedId al servicio ---
-        const redemption = await BenefitService.generateRedemptionToken(claimedId, userId);
-        res.status(201).json({token: redemption.token, expiresAt: redemption.expiresAt});
-
-    } catch (error : any) {
-        res.status(500).json({message: error.message});
+      const userId = req.user?.userId;
+      const { claimedId } = req.params;
+  
+      if (!userId) {
+        return res.status(403).json({ message: 'Usuario no autenticado.' });
+      }
+  
+      // 1️⃣ Buscamos el beneficio reclamado para verificar su estado
+      const claimedBenefit = await prisma.claimedBenefit.findUnique({
+        where: { id: claimedId },
+        select: { id: true, userId: true, status: true },
+      });
+  
+      if (!claimedBenefit) {
+        return res.status(404).json({ message: 'Beneficio reclamado no encontrado.' });
+      }
+  
+      if (claimedBenefit.userId !== userId) {
+        return res.status(403).json({ message: 'No tienes acceso a este beneficio.' });
+      }
+  
+      // 2️⃣ Validar estado antes de generar el QR
+      if (claimedBenefit.status !== 'AVAILABLE') {
+        return res.status(400).json({ message: `Este beneficio ya fue ${claimedBenefit.status === 'USED' ? 'usado' : 'expirado'}.` });
+      }
+  
+      // 3️⃣ Generar token de redención solo si está disponible
+      const redemption = await BenefitService.generateRedemptionToken(claimedId, userId);
+  
+      return res.status(201).json({
+        token: redemption.token,
+        expiresAt: redemption.expiresAt,
+      });
+  
+    } catch (error: any) {
+      console.error('Error al generar QR:', error);
+      return res.status(500).json({ message: 'Error al generar el código QR.' });
     }
-}
+  };
+  
 
 /**
  *  

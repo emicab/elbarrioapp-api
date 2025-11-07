@@ -56,7 +56,7 @@ export const markTokenAsRedeemed = async (token: string, claimedBenefitId: strin
     // Actualizamos el estado del beneficio reclamado original a 'USED'
     await tx.claimedBenefit.update({
       where: { id: claimedBenefitId }, // Usamos el ID que nos pasó el controlador
-      data: { status: ClaimedBenefitStatus.USED },
+      data: { status: 'USED' },
     });
 
     return redemption; // Devolvemos el registro del canje actualizado

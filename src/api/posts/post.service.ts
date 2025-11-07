@@ -189,7 +189,11 @@ export const addCommentToPost = async (postId: string, authorId: string, text: s
         }
     });
 
+    console.log('🔥 Emitiendo comment:new ->', newComment);
+    console.log('Sockets conectados:', io.of('/').sockets.size);
+
     // Notificamos a todos que este post fue actualizado
+    io.emit('comment:new', newComment);  
     io.emit('interaction:update', { postId });
 
     if (post.authorId !== authorId) {
@@ -377,6 +381,6 @@ export const deletePost = async (postId: string, currentUser: User) => {
     await prisma.post.delete({
         where: {id: postId}
     })
-
+    io.emit('post:deleted', postId)
     io.emit('interaction:update', { postId })
 }
