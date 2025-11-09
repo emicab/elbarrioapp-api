@@ -14,6 +14,7 @@ export const initSocketServer = (server: HttpServer) => {
         'https://elbarrioapp.vercel.app', // tu frontend deployado (React / Expo web)
         'https://elbarrioapp-api.onrender.com', // backend
         'exp://127.0.0.1:19000', // modo desarrollo Expo local
+        'exp+elbarrio-app://expo-development-client/?url=https%3A%2F%2F4raivck-elbarrio-8081.exp.direct'
       ], 
       methods: ['GET', 'POST'],
     },

@@ -2,7 +2,7 @@
   "name": "elbarrioapp-api",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "dev:nodemon": "nodemon",
     "dev": "nodemon --ext 'ts,json' --exec 'ts-node ./src/index.ts'",
@@ -21,6 +21,7 @@
     "date-fns-tz": "^3.2.0",
     "dotenv": "^16.5.0",
     "ejs": "^3.1.9",
+    "expo": "^54.0.23",
     "expo-server-sdk": "^3.15.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
