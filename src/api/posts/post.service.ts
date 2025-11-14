@@ -38,12 +38,13 @@ export const createPost = async (
 
     /** se crea el post para enviarlo */
     const newPost = await prisma.post.create({
+        // @ts-ignore
         data: {
             authorId,
             content,
             imageUrls,
             channelId,
-            eventId
+            ...(eventId && { event: { connect: { id: eventId } } })
         },
         include: {
             author: {
