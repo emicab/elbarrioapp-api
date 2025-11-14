@@ -44,7 +44,7 @@ export const createPost = async (
             content,
             imageUrls,
             channelId,
-            ...(eventId && { event: { connect: { id: eventId } } })
+            ...(eventId && { eventId })
         },
         include: {
             author: {
