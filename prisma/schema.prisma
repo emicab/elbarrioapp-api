@@ -126,6 +126,8 @@ model Event {
   benefits   Benefit[]
   tickets    TicketType[]
 
+  post Post[] // un evento puede tener múltiples posts asociados
+
   FavoriteEvent FavoriteEvent[]
 }
 
@@ -265,6 +267,9 @@ model Post {
 
   channelId String
   channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  eventId String? // El post no siempre va a tener un evento asociado
+  event   Event?   @relation(fields: [eventId], references: [id])
 }
 
 model Comment {
@@ -366,7 +371,7 @@ model BenefitRedemption {
   user   User   @relation(fields: [userId], references: [id])
 
   benefitId String
-  benefit   Benefit @relation(fields: [benefitId], references: [id])
+  benefit   Benefit @relation(fields: [benefitId], references: [id], onDelete: Cascade)
 
   // Relación uno a uno: un canje pertenece a un único beneficio reclamado.
   claimedBenefitId String?         @unique
@@ -380,7 +385,7 @@ model ClaimedBenefit {
   userId    String
   user      User                 @relation(fields: [userId], references: [id])
   benefitId String
-  benefit   Benefit              @relation(fields: [benefitId], references: [id])
+  benefit   Benefit              @relation(fields: [benefitId], references: [id], onDelete: Cascade)
 
   // Un beneficio reclamado solo puede tener UN intento de canje (un QR) a la vez.
   redemption BenefitRedemption?
