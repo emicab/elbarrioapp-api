@@ -8,7 +8,7 @@ export const createPostController = async (req: AuthRequest, res: Response) => {
   try {
     const authorId = req.user?.userId;
     const files = req.files as Express.Multer.File[] | undefined;
-    const { content, channelId } = req.body;
+    const { content, channelId, eventId } = req.body;
 
     if (!authorId) {
       return res.status(403).json({ message: 'Usuario no autenticado.' });
@@ -21,7 +21,7 @@ export const createPostController = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ message: 'Se debe seleccionar un canal para publicar.' });
     }
 
-    const post = await PostService.createPost(authorId, content, files, channelId);
+    const post = await PostService.createPost(authorId, content, files, channelId, eventId);
     res.status(201).json(post);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -104,7 +104,7 @@ export const getPostByIdController = async (req: AuthRequest, res: Response) => 
 export const getPostsController = async (req: AuthRequest, res: Response) => {
   try {
       const userId = req.user?.userId;
-      const { channelSlug } = req.query; // Obtenemos el slug del canal desde la query
+      const { channelSlug, eventId } = req.query; // Obtenemos el slug del canal desde la query
 
       if (!userId) {
           return res.status(403).json({ message: 'Usuario no autenticado.' });
@@ -113,7 +113,11 @@ export const getPostsController = async (req: AuthRequest, res: Response) => {
       // Un console.log para depurar y ver qué estamos recibiendo
       console.log(`Fetching posts for channel: ${channelSlug || 'todos'}`);
 
-      const posts = await PostService.findAllPostsForUser(userId, channelSlug as string | undefined);
+      const posts = await PostService.findAllPostsForUser(
+        userId, 
+        channelSlug as string | undefined,
+        eventId as string | undefined
+      );
       res.status(200).json(posts);
 
   } catch (error: any) {

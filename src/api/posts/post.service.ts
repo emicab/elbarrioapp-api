@@ -3,7 +3,13 @@ import { prisma } from '../../lib/prisma';
 import { io } from '../../socket';
 import { uploadImage } from '../users/user.service';
 
-export const createPost = async (authorId: string, content: string, files?: Express.Multer.File[], channelId?: string) => {
+export const createPost = async (
+    authorId: string, 
+    content: string, 
+    files?: Express.Multer.File[], 
+    channelId?: string, 
+    eventId?: string
+) => {
     if (!channelId) {
         throw new Error("No se ha especificado un canal para la publicación.");
     }
@@ -32,11 +38,13 @@ export const createPost = async (authorId: string, content: string, files?: Expr
 
     /** se crea el post para enviarlo */
     const newPost = await prisma.post.create({
+        // @ts-ignore
         data: {
             authorId,
             content,
             imageUrls,
-            channelId
+            channelId,
+            ...(eventId && { event: { connect: { id: eventId } } })
         },
         include: {
             author: {
@@ -133,7 +141,7 @@ export const findAllPosts = async () => {
     });
 };
 
-export const findAllPostsForUser = async (userId: string, channelSlug?: string) => {
+export const findAllPostsForUser = async (userId: string, channelSlug?: string, eventId?: string) => {
 
     // 1. Preparamos el filtro base
     const whereClause: any = {};
@@ -148,11 +156,16 @@ export const findAllPostsForUser = async (userId: string, channelSlug?: string) 
         };
     }
 
+    if (eventId) {
+        whereClause.eventId = eventId;
+    }
+
     // 3. Ejecutamos la consulta a la base de datos con el filtro construido
     const posts = await prisma.post.findMany({
         where: whereClause,
         orderBy: { createdAt: 'desc' },
         include: {
+            event: true,
             author: { select: { firstName: true, lastName: true, isVerified: true, profile: { select: { avatarUrl: true } } } },
             _count: { select: { comments: true, likes: true } },
             likes: { where: { userId: userId } },
